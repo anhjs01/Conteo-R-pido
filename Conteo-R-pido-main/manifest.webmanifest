@@ -1,0 +1,10 @@
+{
+    "name": "Conteo Rápido",
+    "short_name": "Conteo Rápido",
+    "start_url": "./",
+    "display": "standalone",
+    "background_color": "#f4f7fb",
+    "theme_color": "#0f172a",
+    "lang": "es",
+    "icons": []
+}
