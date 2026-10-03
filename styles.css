@@ -16,3 +16,5 @@
 .sync-camera{width:100%;max-height:45vh;background:#000;border-radius:12px}
 .sync-help{font-size:.85rem;color:var(--muted);line-height:1.45}
 @media(max-width:600px){.id-filter{min-width:0;width:100%}.id-filter-result{width:100%;min-height:32px}.sync-code{font-size:1.2rem}.section-head{align-items:stretch;flex-direction:column}.tools{width:100%}}
+
+.sync-camera-wrap{position:relative;margin-top:10px}.flash-btn{position:absolute;right:12px;bottom:12px;background:#0f172acc;color:#fff;border-color:#fff6;backdrop-filter:blur(4px);box-shadow:0 4px 14px #0005}.flash-btn:hover{background:#0f172aee}.flash-btn:disabled{opacity:.6;cursor:not-allowed}
