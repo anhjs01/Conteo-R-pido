@@ -41,7 +41,7 @@ function openForm(d={}){
  (d.repairs||[]).forEach(v=>{const e=[...root.querySelectorAll('input[name="repair"]')].find(i=>i.value===v);if(e)e.checked=true});
  const rules=()=>{
    const no=$("#diag").value==="No reparable",m=[...root.querySelectorAll('input[name="repair"]')].find(i=>i.value==="Mantenimiento");
-   if(no){$("#pack").value="Listo para empacar";if(m)m.checked=false}
+   if(no){$("#pack").value="Listo para empacar";root.querySelectorAll('input[name="repair"]').forEach(i=>i.checked=false);if(m)m.checked=false}
    else if(m){m.checked=true}
    root.querySelectorAll('input[name="reason"]').forEach(i=>i.disabled=!no);
    root.querySelectorAll('input[name="repair"]').forEach(i=>{i.disabled=no||i.value==="Mantenimiento";});
