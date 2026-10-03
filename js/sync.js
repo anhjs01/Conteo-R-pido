@@ -1,0 +1,1 @@
+export const sync={push:async()=>({ok:false,reason:"Sin backend configurado"}),pull:async()=>({ok:false,reason:"Sin backend configurado"})};
