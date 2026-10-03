@@ -84,20 +84,25 @@ async function applySnapshot(snapshot){
  await refresh();
 }
 function openSync(){
- root.innerHTML='<div class="modalback"><div class="modal"><h2>🔗 Sincronizar PC ↔ teléfono</h2><p class="sync-help">Crea un código en el PC y escanéalo desde el teléfono. Mientras ambos estén conectados, los cambios de inventario se envían automáticamente en ambos sentidos.</p><div id="syncStatus" class="sync-status">Sin conexión</div><div class="field"><label>Código del dispositivo</label><div id="syncCode" class="sync-code">Aún no generado</div><div id="syncQr" class="sync-qr"></div></div><div class="modal-actions" style="position:static"><button id="makeSync" class="primary">Generar código en este equipo</button><button id="scanSync">📷 Escanear código</button><button id="disconnectSync" class="secondary">Desconectar</button><button id="closeSync">Cerrar</button></div><div class="field"><label>También puedes escribir el código del otro equipo</label><input id="joinCode" placeholder="Pega aquí el código"></div><div class="modal-actions" style="position:static"><button id="joinSync" class="primary">Conectar con este código</button></div><video id="syncCamera" class="sync-camera hidden" autoplay playsinline muted></video></div></div>';
- const status=$("#syncStatus"),code=$("#syncCode"),qr=$("#syncQr"),video=$("#syncCamera");let cam=null;
+ root.innerHTML='<div class="modalback"><div class="modal"><h2>🔗 Sincronizar PC ↔ teléfono</h2><p class="sync-help">Crea un código en el PC y escanéalo desde el teléfono. Mientras ambos estén conectados, los cambios de inventario se envían automáticamente en ambos sentidos.</p><div id="syncStatus" class="sync-status">Sin conexión</div><div class="field"><label>Código del dispositivo</label><div id="syncCode" class="sync-code">Aún no generado</div><div id="syncQr" class="sync-qr"></div></div><div class="modal-actions" style="position:static"><button id="makeSync" class="primary">Generar código en este equipo</button><button id="scanSync">📷 Escanear código</button><button id="disconnectSync" class="secondary">Desconectar</button><button id="closeSync">Cerrar</button></div><div class="field"><label>También puedes escribir el código del otro equipo</label><input id="joinCode" placeholder="Pega aquí el código"></div><div class="modal-actions" style="position:static"><button id="joinSync" class="primary">Conectar con este código</button></div><div class="sync-camera-wrap"><video id="syncCamera" class="sync-camera hidden" autoplay playsinline muted></video><button id="toggleFlash" class="flash-btn hidden" type="button">🔦 Activar flash</button></div></div></div>';
+ const status=$("#syncStatus"),code=$("#syncCode"),qr=$("#syncQr"),video=$("#syncCamera"),flash=$("#toggleFlash");let cam=null,flashOn=false;
+ const stopCamera=()=>{cam?.getTracks().forEach(t=>t.stop());cam=null;flashOn=false;flash?.classList.add("hidden");if(flash)flash.textContent="🔦 Activar flash";video.classList.add("hidden");video.srcObject=null};
+ const setupFlash=()=>{const track=cam?.getVideoTracks?.()[0],caps=track?.getCapabilities?.()||{};if(caps.torch){flash.classList.remove("hidden");flash.disabled=false;flash.textContent="🔦 Activar flash"}else{flash.classList.add("hidden")}};
+ const setFlash=async on=>{const track=cam?.getVideoTracks?.()[0];if(!track)return;try{await track.applyConstraints({advanced:[{torch:on}]});flashOn=on;flash.textContent=on?"💡 Apagar flash":"🔦 Activar flash"}catch{flashOn=false;flash.textContent="🔦 Activar flash";alert("El flash no está disponible en esta cámara o navegador.")}};
  const setStatus=x=>{status.textContent=x.detail||x.status;status.classList.toggle("connected",x.status==="connected")};
  sync.configure({getSnapshot,applySnapshot,onStatus:setStatus});
  $("#makeSync").onclick=async()=>{try{const id=await sync.host();code.textContent=id;qr.innerHTML="";if(window.QRCode)new QRCode(qr,{text:id,width:190,height:190});setStatus({status:"ready",detail:"Código listo. Escanéalo desde el teléfono."})}catch(e){setStatus({status:"error",detail:e.message||"No se pudo generar el código."})}};
  $("#joinSync").onclick=async()=>{try{await sync.join($("#joinCode").value.trim());setStatus({status:"ready",detail:"Conectando…"})}catch(e){setStatus({status:"error",detail:e.message||"No se pudo conectar."})}};
  $("#disconnectSync").onclick=()=>sync.disconnect();
- $("#closeSync").onclick=()=>{cam?.getTracks().forEach(t=>t.stop());close()};
+ $("#closeSync").onclick=()=>{stopCamera();close()};
+ $("#toggleFlash").onclick=()=>setFlash(!flashOn);
  $("#scanSync").onclick=async()=>{
   try{
    if(!("BarcodeDetector"in window))return alert("Este navegador no permite escanear QR automáticamente. Usa la casilla de código.");
-   cam=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});video.classList.remove("hidden");video.srcObject=cam;await video.play();
+   stopCamera();
+   cam=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});video.classList.remove("hidden");video.srcObject=cam;await video.play();setupFlash();
    const detector=new BarcodeDetector({formats:["qr_code"]});let tries=0;
-   const loop=async()=>{if(video.classList.contains("hidden"))return;try{const found=await detector.detect(video);if(found[0]?.rawValue){$("#joinCode").value=found[0].rawValue;cam.getTracks().forEach(t=>t.stop());video.classList.add("hidden");await sync.join(found[0].rawValue);setStatus({status:"ready",detail:"Conectando…"});return}}catch{}if(++tries<300)setTimeout(loop,200);else{cam.getTracks().forEach(t=>t.stop());video.classList.add("hidden")}};loop();
+   const loop=async()=>{if(video.classList.contains("hidden"))return;try{const found=await detector.detect(video);if(found[0]?.rawValue){$("#joinCode").value=found[0].rawValue;stopCamera();await sync.join(found[0].rawValue);setStatus({status:"ready",detail:"Conectando…"});return}}catch{}if(++tries<300)setTimeout(loop,200);else{stopCamera()}};loop();
   }catch{alert("No se pudo abrir la cámara para escanear el código.")}
  };
 }
