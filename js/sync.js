@@ -11,16 +11,11 @@ function send(m){if(!connection?.open)return false;try{connection.send(m);return
 async function finish(detail="Datos sincronizados."){synced=true;decisionMade=true;emit("synced",detail);if(pendingSnapshot){const s=pendingSnapshot,v=pendingVersion;pendingSnapshot=null;pendingVersion=0;sendUpdate(s,v)}}
 function sendSnapshot(type,snapshot,version=0){
   if(!snapshot)return false;
-  const raw=JSON.stringify(snapshot);
-  const total=Math.max(1,Math.ceil(raw.length/SNAPSHOT_CHUNK_SIZE));
+  const chars=Array.from(JSON.stringify(snapshot));
+  const total=Math.max(1,Math.ceil(chars.length/SNAPSHOT_CHUNK_SIZE));
   const transferId=type+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,8);
   for(let i=0;i<total;i++){
-    let chunk=raw.slice(i*SNAPSHOT_CHUNK_SIZE,(i+1)*SNAPSHOT_CHUNK_SIZE);
-    if(chunk.length&&/^[\\uD800-\\uDBFF]$/.test(chunk[chunk.length-1]))chunk=chunk.slice(0,-1);
-    if(i<total-1){
-      const next=raw.slice((i+1)*SNAPSHOT_CHUNK_SIZE,(i+1)*SNAPSHOT_CHUNK_SIZE+1);
-      if(next&&/^[\\uDC00-\\uDFFF]$/.test(next))chunk+=next;
-    }
+    const chunk=chars.slice(i*SNAPSHOT_CHUNK_SIZE,(i+1)*SNAPSHOT_CHUNK_SIZE).join("");
     if(!send({type:"snapshot-chunk",transferId,index:i,total,version,purpose:type,data:chunk}))return false;
   }
   return true;
