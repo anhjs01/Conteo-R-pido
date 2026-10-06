@@ -17,27 +17,93 @@
             <h1>Conteo Rápido</h1>
             <p>Inventario de diademas</p>
         </div>
-        <div class="lotbar"><span id="activeLotName">Sin lote</span><button id="lotBtn" class="secondary">Lotes</button>
+
+        <div class="lotbar">
+            <span id="activeLotName">Sin lote</span>
+            <button id="lotBtn" class="secondary">Lotes</button>
         </div>
     </header>
+
     <main>
         <section class="panel hero">
             <div>
                 <h2>Inventario</h2>
                 <p>Identifica, diagnostica, repara y empaca sin perder información.</p>
             </div>
-            <div class="actions"><button id="scanBtn" class="primary big">📷 Escanear</button><button id="manualBtn"
-                    class="secondary big">✍️ Añadir manualmente</button></div>
+
+            <div class="actions">
+                <button id="scanBtn" class="primary big">📷 Escanear</button>
+
+                <button id="manualBtn" class="secondary big">
+                    ✍️ Añadir manualmente
+                </button>
+
+                <button id="audioTestBtn" class="secondary big">
+                    🎙️ Test de audio
+                </button>
+            </div>
         </section>
+
         <section id="stats" class="stats"></section>
+
         <section class="panel">
             <div class="section-head">
                 <h2>Unidades</h2>
-                <div class="tools"><input id="idFilter" class="id-filter" placeholder="🔎 Buscar ID…"><span id="idFilterResult" class="id-filter-result"></span><button id="copyBtn">Copiar tabla</button><button
-                        id="exportExcel">Excel</button><button id="exportCsv">CSV</button><button
-                        id="exportJson">JSON</button><button id="syncBtn">🔗 Sincronizar</button><label class="filebtn">Importar JSON<input id="importJson"
-                            type="file" accept=".json,application/json"></label></div>
+
+                <div class="tools">
+                    <input
+                        id="idFilter"
+                        class="id-filter"
+                        placeholder="🔎 Buscar ID…"
+                    >
+
+                    <span
+                        id="idFilterResult"
+                        class="id-filter-result"
+                    ></span>
+
+                    <button id="copyBtn">
+                        Copiar tabla
+                    </button>
+
+                    <button id="exportExcel">
+                        Excel
+                    </button>
+
+                    <button id="importExcel">
+                        Importar Excel
+                    </button>
+
+                    <button id="exportCsv">
+                        CSV
+                    </button>
+
+                    <button id="exportJson">
+                        JSON
+                    </button>
+
+                    <button id="syncBtn">
+                        🔗 Sincronizar
+                    </button>
+
+                    <label class="filebtn">
+                        Importar JSON
+                        <input
+                            id="importJson"
+                            type="file"
+                            accept=".json,application/json"
+                        >
+                    </label>
+
+                    <input
+                        id="importExcelFile"
+                        type="file"
+                        accept=".xlsx,.xls"
+                        hidden
+                    >
+                </div>
             </div>
+
             <div class="tablewrap">
                 <table>
                     <thead>
@@ -56,16 +122,25 @@
                             <th>Acciones</th>
                         </tr>
                     </thead>
+
                     <tbody id="inventoryBody"></tbody>
                 </table>
             </div>
         </section>
     </main>
-    <footer>Conteo Rápido · Registros y unidades</footer>
+
+    <footer>
+        Conteo Rápido · Registros y unidades
+    </footer>
+
     <div id="modalRoot"></div>
+
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
     <script type="module" src="js/app.js"></script>
 </body>
 
