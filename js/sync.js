@@ -1,5 +1,7 @@
 let peer=null,connection=null,getSnapshot=async()=>({}),applySnapshot=async()=>{},statusHandler=()=>{};
 let role="host",synced=false,localVersion=0,remoteVersion=0,pendingSnapshot=null,pendingVersion=0,remoteHello=null,decisionMade=false;
+const SNAPSHOT_CHUNK_SIZE=5000;
+const incomingTransfers=new Map();
 const emit=(status,detail="")=>statusHandler({status,detail});
 const units=s=>Array.isArray(s?.units)?s.units.length:0;
 const lots=s=>Array.isArray(s?.lots)?s.lots.length:0;
@@ -7,7 +9,57 @@ function latest(s){let a=[];for(const list of [s?.units,s?.lots,s?.meta])if(Arra
 async function summary(s=null){s=s||await getSnapshot();return{units:units(s),lots:lots(s),total:units(s)+lots(s),updatedAt:Math.max(localVersion,latest(s),1)}}
 function send(m){if(!connection?.open)return false;try{connection.send(m);return true}catch{return false}}
 async function finish(detail="Datos sincronizados."){synced=true;decisionMade=true;emit("synced",detail);if(pendingSnapshot){const s=pendingSnapshot,v=pendingVersion;pendingSnapshot=null;pendingVersion=0;sendUpdate(s,v)}}
-function sendUpdate(snapshot,version=0){if(!snapshot)return false;localVersion=Math.max(localVersion,version||Date.now());return send({type:"state-update",version:localVersion,snapshot})}
+function sendSnapshot(type,snapshot,version=0){
+  if(!snapshot)return false;
+  const chars=Array.from(JSON.stringify(snapshot));
+  const total=Math.max(1,Math.ceil(chars.length/SNAPSHOT_CHUNK_SIZE));
+  const transferId=type+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,8);
+  for(let i=0;i<total;i++){
+    const chunk=chars.slice(i*SNAPSHOT_CHUNK_SIZE,(i+1)*SNAPSHOT_CHUNK_SIZE).join("");
+    if(!send({type:"snapshot-chunk",transferId,index:i,total,version,purpose:type,data:chunk}))return false;
+  }
+  return true;
+}
+function sendUpdate(snapshot,version=0){
+  if(!snapshot)return false;
+  localVersion=Math.max(localVersion,version||Date.now());
+  return sendSnapshot("state-update",snapshot,localVersion);
+}
+async function receiveSnapshotChunk(m){
+  const id=String(m.transferId||"");
+  if(!id||!Number.isInteger(m.index)||!Number.isInteger(m.total)||m.total<1||m.index<0||m.index>=m.total||typeof m.data!=="string")return;
+  let t=incomingTransfers.get(id);
+  if(!t){
+    t={total:m.total,version:Number(m.version)||Date.now(),purpose:m.purpose,chunks:new Array(m.total),received:0};
+    incomingTransfers.set(id,t);
+  }
+  if(t.total!==m.total)return;
+  if(t.chunks[m.index]===undefined){
+    t.chunks[m.index]=m.data;
+    t.received++;
+  }
+  if(t.received<t.total)return;
+  incomingTransfers.delete(id);
+  const snapshot=JSON.parse(t.chunks.join(""));
+  const v=t.version;
+  if(t.purpose==="state-response"){
+    if(v>=remoteVersion){
+      remoteVersion=v;
+      emit("applying","Aplicando los datos del otro dispositivo…");
+      await applySnapshot(snapshot);
+    }
+    send({type:"sync-ack",version:remoteVersion});
+    await finish("Sincronización inicial completada.");
+    return;
+  }
+  if(t.purpose==="state-update"){
+    if(v<=remoteVersion)return;
+    remoteVersion=v;
+    emit("applying","Aplicando actualización…");
+    await applySnapshot(snapshot);
+    emit("synced","Datos actualizados desde el otro dispositivo.");
+  }
+}
 async function handshake(){if(!connection?.open)return;synced=false;decisionMade=false;remoteHello=null;const s=await getSnapshot(),sum=await summary(s);localVersion=Math.max(localVersion,sum.updatedAt);send({type:"hello",role,summary:sum});emit("checking","Comparando los datos de ambos dispositivos…")}
 async function decideAsHost(){
   if(decisionMade||role!=="host"||!remoteHello||!connection?.open)return;
@@ -22,7 +74,7 @@ async function decideAsHost(){
     localVersion=v;
     send({type:"initial-decision",winner:"host",version:v});
     emit("applying","Enviando los datos del PC al dispositivo…");
-    send({type:"state-response",version:v,snapshot:s});
+    sendSnapshot("state-response",s,v);
   }else{
     send({type:"initial-decision",winner:"joiner"});
     send({type:"request-state"});
@@ -55,7 +107,11 @@ function attach(conn,r="host"){
       if(m.type==="request-state"){
         const s=await getSnapshot(),sum=await summary(s);
         localVersion=Math.max(localVersion,sum.updatedAt,Date.now());
-        send({type:"state-response",version:localVersion,snapshot:s});
+        sendSnapshot("state-response",s,localVersion);
+        return;
+      }
+      if(m.type==="snapshot-chunk"){
+        await receiveSnapshotChunk(m);
         return;
       }
       if(m.type==="state-response"&&m.snapshot){
@@ -64,7 +120,6 @@ function attach(conn,r="host"){
           remoteVersion=v;
           emit("applying","Aplicando los datos del otro dispositivo…");
           await applySnapshot(m.snapshot);
-          remoteVersion=v;
         }
         send({type:"sync-ack",version:remoteVersion});
         await finish("Sincronización inicial completada.");
