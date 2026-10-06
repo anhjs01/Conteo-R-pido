@@ -661,36 +661,22 @@ async function applySnapshot(snapshot){
       CONFIG.meta
     ]
   ){
-    for(
-      const x of await getAll(store)
-    ){
-      await del(
-        store,
-        x.id??x.key
-      );
-    }
-  }
-
-  for(const x of snapshot.units){
-    await put(
-      CONFIG.store,
-      x
+    const current=await getAll(store);
+    await Promise.all(
+      current.map(x=>
+        del(
+          store,
+          x.id??x.key
+        )
+      )
     );
   }
 
-  for(const x of snapshot.lots){
-    await put(
-      CONFIG.lots,
-      x
-    );
-  }
-
-  for(const x of snapshot.meta){
-    await put(
-      CONFIG.meta,
-      x
-    );
-  }
+  await Promise.all([
+    ...snapshot.units.map(x=>put(CONFIG.store,x)),
+    ...snapshot.lots.map(x=>put(CONFIG.lots,x)),
+    ...snapshot.meta.map(x=>put(CONFIG.meta,x))
+  ]);
 
   await refresh();
 }
