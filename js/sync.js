@@ -9,8 +9,95 @@ function send(m){if(!connection?.open)return false;try{connection.send(m);return
 async function finish(detail="Datos sincronizados."){synced=true;decisionMade=true;emit("synced",detail);if(pendingSnapshot){const s=pendingSnapshot,v=pendingVersion;pendingSnapshot=null;pendingVersion=0;sendUpdate(s,v)}}
 function sendUpdate(snapshot,version=0){if(!snapshot)return false;localVersion=Math.max(localVersion,version||Date.now());return send({type:"state-update",version:localVersion,snapshot})}
 async function handshake(){if(!connection?.open)return;synced=false;decisionMade=false;remoteHello=null;const s=await getSnapshot(),sum=await summary(s);localVersion=Math.max(localVersion,sum.updatedAt);send({type:"hello",role,summary:sum});emit("checking","Comparando los datos de ambos dispositivos…")}
-async function decide(){if(decisionMade||role!=="joiner"||!remoteHello||!connection?.open)return;decisionMade=true;const local=await summary(),remote=remoteHello.summary||{};let winner="joiner";if((remote.total??((remote.units??0)+(remote.lots??0)))>local.total)winner="host";else if((remote.total??((remote.units??0)+(remote.lots??0)))===local.total&&(remote.updatedAt??0)>=local.updatedAt)winner="host";if(winner==="joiner"){const s=await getSnapshot(),v=Math.max(localVersion,Date.now());localVersion=v;send({type:"initial-decision",winner:"joiner",version:v,snapshot:s});return}else{send({type:"initial-decision",winner:"host"});send({type:"request-state"})}}
-function attach(conn,r="host"){if(connection&&connection!==conn){try{conn.close()}catch{}return}connection=conn;role=r;conn.on("open",async()=>{emit("connected","Dispositivo conectado. Comparando datos…");await handshake()});conn.on("data",async m=>{try{if(!m||typeof m!=="object")return;if(m.type==="hello"){remoteHello=m;emit("checking","Comparando los datos de ambos dispositivos…");await decide();return}if(m.type==="initial-decision"){if(m.winner==="joiner"){remoteVersion=Math.max(remoteVersion,Number(m.version)||0);if(m.snapshot){emit("applying","Aplicando los datos del otro dispositivo…");await applySnapshot(m.snapshot);remoteVersion=Math.max(remoteVersion,Number(m.version)||0)}send({type:"sync-ack",version:remoteVersion});await finish("Sincronización inicial completada. Los datos del otro dispositivo tenían más registros.")}return}if(m.type==="request-state"){const s=await getSnapshot(),sum=await summary(s);localVersion=Math.max(localVersion,sum.updatedAt,Date.now());send({type:"state-response",version:localVersion,snapshot:s});return}if(m.type==="state-response"&&m.snapshot){const v=Number(m.version)||Date.now();if(v>=remoteVersion){remoteVersion=v;emit("applying","Aplicando los datos del otro dispositivo…");await applySnapshot(m.snapshot);remoteVersion=v}send({type:"sync-ack",version:remoteVersion});await finish("Sincronización inicial completada.");return}if(m.type==="sync-ack"){if(!synced){await finish("Sincronización inicial completada.")}return}if(m.type==="state-update"&&m.snapshot){const v=Number(m.version)||0;if(v<=remoteVersion)return;remoteVersion=v;emit("applying","Aplicando actualización…");await applySnapshot(m.snapshot);emit("synced","Datos actualizados desde el otro dispositivo.");return}if(m.type==="ping")send({type:"pong"})}catch(e){emit("error",e?.message||"No se pudo sincronizar.")}});conn.on("close",()=>{if(connection===conn){connection=null;synced=false;decisionMade=false;emit("disconnected","La conexión se cerró.")}});conn.on("error",e=>emit("error",e?.message||"Error de conexión."))}
+async function decideAsHost(){
+  if(decisionMade||role!=="host"||!remoteHello||!connection?.open)return;
+  decisionMade=true;
+  const local=await summary();
+  const remote=remoteHello.summary||{};
+  const remoteTotal=Number(remote.total??((remote.units??0)+(remote.lots??0)));
+  const hostWins=local.total>remoteTotal||(local.total===remoteTotal&&(local.updatedAt??0)>=(remote.updatedAt??0));
+
+  if(hostWins){
+    const s=await getSnapshot(),v=Math.max(localVersion,Date.now());
+    localVersion=v;
+    send({type:"initial-decision",winner:"host",version:v});
+    emit("applying","Enviando los datos del PC al dispositivo…");
+    send({type:"state-response",version:v,snapshot:s});
+  }else{
+    send({type:"initial-decision",winner:"joiner"});
+    send({type:"request-state"});
+    emit("applying","Recibiendo los datos del dispositivo…");
+  }
+}
+
+function attach(conn,r="host"){
+  if(connection&&connection!==conn){try{conn.close()}catch{}return}
+  connection=conn;
+  role=r;
+  conn.on("open",async()=>{
+    emit("connected","Dispositivo conectado. Comparando datos…");
+    await handshake();
+  });
+  conn.on("data",async m=>{
+    try{
+      if(!m||typeof m!=="object")return;
+      if(m.type==="hello"){
+        remoteHello=m;
+        emit("checking","Comparando los datos de ambos dispositivos…");
+        if(role==="host"&&m.role==="joiner")await decideAsHost();
+        return;
+      }
+      if(m.type==="initial-decision"){
+        if(m.winner==="host")emit("applying","Aplicando los datos del PC…");
+        else if(m.winner==="joiner")emit("applying","Enviando los datos del dispositivo al PC…");
+        return;
+      }
+      if(m.type==="request-state"){
+        const s=await getSnapshot(),sum=await summary(s);
+        localVersion=Math.max(localVersion,sum.updatedAt,Date.now());
+        send({type:"state-response",version:localVersion,snapshot:s});
+        return;
+      }
+      if(m.type==="state-response"&&m.snapshot){
+        const v=Number(m.version)||Date.now();
+        if(v>=remoteVersion){
+          remoteVersion=v;
+          emit("applying","Aplicando los datos del otro dispositivo…");
+          await applySnapshot(m.snapshot);
+          remoteVersion=v;
+        }
+        send({type:"sync-ack",version:remoteVersion});
+        await finish("Sincronización inicial completada.");
+        return;
+      }
+      if(m.type==="sync-ack"){
+        if(!synced)await finish("Sincronización inicial completada.");
+        return;
+      }
+      if(m.type==="state-update"&&m.snapshot){
+        const v=Number(m.version)||0;
+        if(v<=remoteVersion)return;
+        remoteVersion=v;
+        emit("applying","Aplicando actualización…");
+        await applySnapshot(m.snapshot);
+        emit("synced","Datos actualizados desde el otro dispositivo.");
+        return;
+      }
+      if(m.type==="ping")send({type:"pong"});
+    }catch(e){emit("error",e?.message||"No se pudo sincronizar.")}
+  });
+  conn.on("close",()=>{
+    if(connection===conn){
+      connection=null;
+      synced=false;
+      decisionMade=false;
+      remoteHello=null;
+      emit("disconnected","La conexión se cerró.");
+    }
+  });
+  conn.on("error",e=>emit("error",e?.message||"Error de conexión."));
+}
+
 function ensure(){if(peer&&!peer.destroyed)return peer;if(!window.Peer)throw new Error("No se pudo cargar el servicio de sincronización.");peer=new Peer(undefined,{debug:0});peer.on("connection",c=>attach(c,"host"));peer.on("disconnected",()=>emit("disconnected","Se perdió la señal de sincronización."));peer.on("error",e=>emit("error",e?.message||"No se pudo conectar."));return peer}
 export async function host(){const p=ensure();role="host";return await new Promise((resolve,reject)=>{if(p.open)return resolve(p.id);const o=id=>{clean();resolve(id)},e=x=>{clean();reject(x)},clean=()=>{p.off("open",o);p.off("error",e)};p.on("open",o);p.on("error",e)})}
 export async function join(id){id=String(id||"").trim();if(!id)throw new Error("Escribe o escanea el código del PC.");const p=ensure();if(connection){try{connection.close()}catch{}connection=null}role="joiner";const c=p.connect(id,{reliable:true,serialization:"json",metadata:{role:"joiner"}});attach(c,"joiner");return c}
