@@ -299,7 +299,7 @@ function openForm(d={}){
     .map(x=>
       '<label><input type="checkbox" name="repair" value="'+
       esc(x)+
-      '">'+
+      '"> '+
       esc(x)+
       "</label>")
     .join("");
@@ -542,9 +542,11 @@ async function openLots(){
           )
         ){
           await deleteLot(b.dataset.d);
+
           await sync.broadcastSnapshot(
             await getSnapshot()
           );
+
           openLots();
           refresh();
         }
@@ -692,6 +694,11 @@ async function applySnapshot(snapshot){
 
   await refresh();
 }
+
+/* =========================================================
+   SINCRONIZACIÓN
+   Esta sección se conserva del A viejo.
+   ========================================================= */
 
 function syncStatusText(info){
   if(!info)return"Sin conexión";
@@ -857,10 +864,6 @@ async function handleSyncStatus(info){
   if(
     info.status==="snapshot-conflict"
   ){
-    /*
-     * El snapshot llegará inmediatamente después
-     * mediante request-snapshot.
-     */
     return;
   }
 
@@ -898,10 +901,6 @@ async function chooseSyncData(choice){
 
   try{
     if(choice==="local"){
-      /*
-       * "Conservar mis datos":
-       * enviamos nuestro snapshot al otro dispositivo.
-       */
       const ok=await sync.keepLocal(peerId);
 
       if(!ok){
@@ -920,10 +919,6 @@ async function chooseSyncData(choice){
     }
 
     if(choice==="remote"){
-      /*
-       * "Usar datos del otro":
-       * snapshot recibido -> reemplazo local explícitamente autorizado.
-       */
       if(!snapshot){
         throw new Error(
           "Todavía no se recibieron los datos del otro dispositivo."
@@ -1069,7 +1064,6 @@ function openSync(){
 
   renderSyncDevices();
 
-  const status=$("#syncStatus");
   const code=$("#syncCode");
   const qr=$("#syncQr");
   const video=$("#syncCamera");
@@ -1174,9 +1168,16 @@ function openSync(){
 
   $("#joinSync").onclick=async()=>{
     try{
-      await sync.join(
-        $("#joinCode").value.trim()
-      );
+      const joinCode=$("#joinCode").value.trim();
+
+      if(!joinCode){
+        return updateSyncVisual({
+          status:"error",
+          detail:"Escribe o escanea el código del otro dispositivo."
+        });
+      }
+
+      await sync.join(joinCode);
 
       updateSyncVisual({
         status:"ready",
@@ -1195,6 +1196,11 @@ function openSync(){
   $("#disconnectSync").onclick=()=>{
     sync.disconnect();
     renderSyncDevices();
+
+    updateSyncVisual({
+      status:"disconnected",
+      detail:"Sin conexión."
+    });
   };
 
   $("#closeSync").onclick=()=>{
@@ -1296,14 +1302,10 @@ function openSync(){
     });
   };
 
-  /*
-   * Actualizamos el estado de la ventana inmediatamente
-   * por si ya existía una conexión antes de abrirla.
-   */
   renderSyncDevices();
 }
 
-$( "#scanBtn" ).onclick=async()=>{
+$("#scanBtn").onclick=async()=>{
   if(!await requireLot())return;
 
   scanIdentification(r=>{
@@ -1645,13 +1647,8 @@ $("#importJson").onchange=async e=>{
 /*
  * Configuración ÚNICA de sincronización.
  *
- * El código anterior tenía otra llamada al final:
- *
- * sync.configure(... onStatus:()=>{})
- *
- * que anulaba el estado de la ventana.
- *
- * Ahora queda una sola configuración.
+ * Se mantiene una sola configuración para que
+ * el onStatus de la ventana no sea reemplazado.
  */
 sync.configure({
   getSnapshot,
