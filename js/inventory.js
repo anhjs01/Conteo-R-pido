@@ -296,10 +296,10 @@ export async function saveUnit(data, oldId) {
 
   /*
     ==========================================================
-    CONTROL DE IDS
+    HISTORIAL DE IDS
     ==========================================================
 
-    Los IDs eliminados pueden volver a utilizarse.
+    NO MODIFICAMOS ESTA LÓGICA.
     ==========================================================
   */
 
@@ -393,23 +393,23 @@ export async function removeUnit(id) {
   const history =
     await getByKey(
       CONFIG.meta,
-      "usedIds"
+      "deletedIds"
     );
 
-  const usedIds =
+  const deletedIds =
     Array.isArray(history?.value)
       ? [...history.value]
       : [];
 
-  if (unit.unitId) {
-    const updatedUsedIds =
-      usedIds.filter(
-        usedId => usedId !== unit.unitId
-      );
+  if (
+    unit.unitId &&
+    !deletedIds.includes(unit.unitId)
+  ) {
+    deletedIds.push(unit.unitId);
 
     await put(CONFIG.meta, {
-      key: "usedIds",
-      value: updatedUsedIds
+      key: "deletedIds",
+      value: deletedIds
     });
   }
 
